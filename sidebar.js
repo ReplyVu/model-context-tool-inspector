@@ -252,7 +252,8 @@ async function promptAI() {
       }
 
       // FIXME: New WebMCP tools may not be discovered if there's a navigation.
-      // An articial timeout could be introduced for mitigation but it's not robust.
+      // An articial timeout is introduced for mitigation but it's not robust enough.
+      await new Promise((r) => setTimeout(r, 500));
 
       const sendMessageParams = { message: toolResponses, config: getConfig() };
       trace.push({ userPrompt: sendMessageParams });
