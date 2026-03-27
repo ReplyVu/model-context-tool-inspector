@@ -109,6 +109,13 @@ tr:nth-child(even) {
   margin-bottom: 10px;
 }
 
+.label-with-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+}
+
 label {
   display: block;
   margin-bottom: 6px;
@@ -217,8 +224,80 @@ tbody.prettify pre {
   transform: rotate(-90deg);
 }
 
+.icon-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+  width: 24px;
+  height: 24px;
+  color: #5f6368;
+  position: absolute;
+  right: 0;
+  top: -4px;
+}
+
+.icon-btn:hover,
+.icon-btn:focus-visible {
+  background-color: #f3f4f6;
+  color: #333;
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
 .is-hidden {
   display: none;
+}
+
+.menu-label {
+  font-weight: bold;
+  padding: 8px 10px 4px 10px;
+  font-size: 0.625rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+dialog {
+  padding: 4px 0;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  background-color: white;
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 10%);
+}
+
+.model-option {
+  width: 100%;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: normal;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #333;
+  background: none;
+  border: none;
+  border-radius: 0;
+  text-align: left;
+  transition: background-color 0.2s;
+}
+
+.model-option:hover {
+  background-color: #f3f4f6;
+}
+
+.model-option input[type="radio"] {
+  width: auto;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -237,6 +316,28 @@ tbody.prettify pre {
     background-color: #1e1e1e;
     border-color: #404040;
     color: #fff;
+  }
+
+  dialog {
+    background-color: #1e1e1e;
+    border-color: #404040;
+    color: #fff;
+  }
+
+  dialog::backdrop {
+    background: rgb(0 0 0 / 75%);
+  }
+
+  .model-option {
+    color: #d4d4d4;
+  }
+
+  .model-option:hover {
+    background-color: #262626;
+  }
+
+  .menu-label {
+    color: #a3a3a3;
   }
 
   select:focus,
@@ -312,5 +413,12 @@ tbody.prettify pre {
 
   #status {
     color: #f87171; /* Lighter red for readability on dark */
+  }
+
+  .icon-btn:hover,
+  .icon-btn:focus-visible {
+    background-color: #262626;
+    color: #fff;
+    outline-color: #3b82f6;
   }
 }

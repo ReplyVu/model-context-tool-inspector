@@ -21,6 +21,7 @@ const traceBtn = document.getElementById('traceBtn');
 const resetBtn = document.getElementById('resetBtn');
 const apiKeyBtn = document.getElementById('apiKeyBtn');
 const promptResults = document.getElementById('promptResults');
+const advancedSection = document.getElementById('advancedSection');
 
 // Inject content script first.
 (async () => {
@@ -153,7 +154,16 @@ async function initGenAI() {
   promptBtn.disabled = !localStorage.apiKey;
   resetBtn.disabled = !localStorage.apiKey;
 }
-initGenAI();
+await initGenAI();
+
+document.querySelectorAll('input[name="model"]').forEach((radio) => {
+  radio.checked = radio.value === localStorage.model;
+  radio.onclick = () => {
+    localStorage.model = radio.value;
+    chat = undefined;
+    advancedSection.hidePopover();
+  };
+});
 
 async function suggestUserPrompt() {
   if (currentTools.length == 0 || !genAI || userPromptText.value !== lastSuggestedUserPrompt)
