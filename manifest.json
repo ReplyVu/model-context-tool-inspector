@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "WebMCP - Model Context Tool Inspector",
+  "name": "Reply_WebMCP - Model Context Tool Inspector",
   "description": "Inspect, monitor, and execute WebMCP tools manually or with Gemini",
   "version": "1.9.3",
   "permissions": ["sidePanel", "activeTab", "scripting"],

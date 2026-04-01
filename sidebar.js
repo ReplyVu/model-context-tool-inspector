@@ -155,12 +155,14 @@ async function initGenAI() {
   resetBtn.disabled = !localStorage.apiKey;
 }
 await initGenAI();
+showIntro();
 
 document.querySelectorAll('input[name="model"]').forEach((radio) => {
   radio.checked = radio.value === localStorage.model;
   radio.onclick = () => {
     localStorage.model = radio.value;
     chat = undefined;
+    showIntro();
     advancedSection.hidePopover();
   };
 });
@@ -179,9 +181,12 @@ async function suggestUserPrompt() {
       '2. **Flight Search:** Use **FUTURE** dates only (e.g., "next week," "February 15th").',
       '3. **Accommodation Search:** Use **FUTURE** dates only (e.g., "next weekend," "March 15th").',
       '**Task:**',
-      'Generate one natural user query for a range of tools below, ideally chaining them together.',
+      chat?.getHistory().length
+        ? 'Based on the conversation so far, generate one natural follow-up message the user could send next. Use the exact same values, amounts, and details already mentioned in the conversation — do not invent new numbers or scenarios.'
+        : 'Generate one natural user query for a range of tools below, ideally chaining them together.',
       'Ensure the date makes sense relative to today.',
       'Output the query text only.',
+      ...(chat?.getHistory().length ? [`**Conversation so far:**\n${chat.getHistory().map((t) => `${t.role}: ${t.parts.map((p) => p.text || '').join('')}`).join('\n')}`] : []),
       '**Tools:**',
       JSON.stringify(currentTools),
     ],
@@ -208,7 +213,8 @@ promptBtn.onclick = async () => {
     await promptAI();
   } catch (error) {
     trace.push({ error });
-    logPrompt(`⚠️ Error: "${error}"`);
+    hideTyping();
+    appendBubble(`⚠️ Error: "${error}"`, 'ai');
   }
 };
 
@@ -222,9 +228,10 @@ async function promptAI() {
   const message = userPromptText.value;
   userPromptText.value = '';
   lastSuggestedUserPrompt = '';
-  promptResults.textContent += `User prompt: "${message}"\n`;
+  appendBubble(message, 'user');
   const sendMessageParams = { message, config: getConfig() };
   trace.push({ userPrompt: sendMessageParams });
+  showTyping();
   let currentResult = await chat.sendMessage(sendMessageParams);
   let finalResponseGiven = false;
 
@@ -234,26 +241,35 @@ async function promptAI() {
     const functionCalls = response.functionCalls || [];
 
     if (functionCalls.length === 0) {
+      hideTyping();
       if (!response.text) {
-        logPrompt(`⚠️ AI response has no text: ${JSON.stringify(response.candidates)}\n`);
+        appendBubble(`⚠️ AI response has no text: ${JSON.stringify(response.candidates)}`, 'ai');
       } else {
-        logPrompt(`AI result: ${response.text?.trim()}\n`);
+        appendBubble(response.text.trim(), 'ai');
       }
       finalResponseGiven = true;
+      lastSuggestedUserPrompt = '';
+      suggestUserPrompt();
     } else {
       const toolResponses = [];
       for (const { name, args } of functionCalls) {
         const inputArgs = JSON.stringify(args);
-        logPrompt(`AI calling tool "${name}" with ${inputArgs}`);
+        const card = appendToolCard(name, inputArgs);
         try {
           const result = await executeTool(tab.id, name, inputArgs);
           toolResponses.push({ functionResponse: { name, response: { result } } });
-          logPrompt(`Tool "${name}" result: ${result}`);
+          const resultDiv = document.createElement('div');
+          resultDiv.className = 'tool-body result';
+          resultDiv.innerHTML = `<pre>${escapeHtml(String(result))}</pre>`;
+          card.appendChild(resultDiv);
         } catch (e) {
-          logPrompt(`⚠️ Error executing tool "${name}": ${e.message}`);
           toolResponses.push({
             functionResponse: { name, response: { error: e.message } },
           });
+          const resultDiv = document.createElement('div');
+          resultDiv.className = 'tool-body error';
+          resultDiv.innerHTML = `<pre>${escapeHtml(e.message)}</pre>`;
+          card.appendChild(resultDiv);
         }
       }
 
@@ -263,6 +279,7 @@ async function promptAI() {
 
       const sendMessageParams = { message: toolResponses, config: getConfig() };
       trace.push({ userPrompt: sendMessageParams });
+      showTyping();
       currentResult = await chat.sendMessage(sendMessageParams);
     }
   }
@@ -273,7 +290,8 @@ resetBtn.onclick = () => {
   trace = [];
   userPromptText.value = '';
   lastSuggestedUserPrompt = '';
-  promptResults.textContent = '';
+  hideTyping();
+  showIntro();
   suggestUserPrompt();
 };
 
@@ -282,6 +300,7 @@ apiKeyBtn.onclick = async () => {
   if (apiKey == null) return;
   localStorage.apiKey = apiKey;
   await initGenAI();
+  showIntro();
   suggestUserPrompt();
 };
 
@@ -329,10 +348,77 @@ function updateDefaultValueForInputArgs() {
 
 // Utils
 
-function logPrompt(text) {
-  promptResults.textContent += `${text}\n`;
+let typingEl = null;
+
+function showTyping() {
+  if (typingEl) return;
+  typingEl = document.createElement('div');
+  typingEl.className = 'chat-msg ai typing';
+  typingEl.innerHTML = '<div class="chat-avatar">AI</div><div class="bubble"><span></span><span></span><span></span></div>';
+  promptResults.appendChild(typingEl);
   promptResults.scrollTop = promptResults.scrollHeight;
 }
+
+function hideTyping() {
+  typingEl?.remove();
+  typingEl = null;
+}
+
+function renderBubble(text, role) {
+  const div = document.createElement('div');
+  div.className = `chat-msg ${role}`;
+  if (role === 'ai') {
+    div.innerHTML = `<div class="chat-avatar">AI</div><div class="bubble">${escapeHtml(text)}</div>`;
+  } else {
+    div.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`;
+  }
+  promptResults.appendChild(div);
+  promptResults.scrollTop = promptResults.scrollHeight;
+}
+
+function renderToolCard(name, args) {
+  const row = document.createElement('div');
+  row.className = 'chat-msg ai';
+  const avatar = document.createElement('div');
+  avatar.className = 'chat-avatar';
+  avatar.textContent = 'AI';
+  const card = document.createElement('details');
+  card.className = 'tool-card';
+  card.innerHTML = `<summary>🔧 <strong>${escapeHtml(name)}</strong></summary><div class="tool-body"><pre>${escapeHtml(args)}</pre></div>`;
+  row.appendChild(avatar);
+  row.appendChild(card);
+  promptResults.appendChild(row);
+  promptResults.scrollTop = promptResults.scrollHeight;
+  return card;
+}
+
+function appendBubble(text, role) {
+  hideTyping();
+  renderBubble(text, role);
+}
+
+function appendToolCard(name, args) {
+  hideTyping();
+  return renderToolCard(name, args);
+}
+
+function showIntro() {
+  promptResults.innerHTML = '';
+  if (!genAI) {
+    const el = document.createElement('div');
+    el.className = 'chat-empty';
+    el.textContent = 'Set a Gemini API key to start chatting.';
+    promptResults.appendChild(el);
+    return;
+  }
+  // Intro message is not tracked in displayMessages — it's always re-shown fresh
+  renderBubble('Hi! I\'m your AI page assistant. I can use the tools available on this page to help you. What would you like to do?', 'ai');
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 
 function getFormattedDate() {
   const today = new Date();
