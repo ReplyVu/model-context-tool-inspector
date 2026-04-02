@@ -4,6 +4,11 @@
  */
 
 import { GoogleGenAI } from './js-genai.js';
+import { OpenRouterChat } from './openai-adapter.js';
+
+function isOpenRouter(model = localStorage.model) {
+  return model?.includes('/');
+}
 
 const statusDiv = document.getElementById('status');
 const tbody = document.getElementById('tableBody');
@@ -151,8 +156,10 @@ async function initGenAI() {
   if (env?.apiKey) localStorage.apiKey ??= env.apiKey;
   localStorage.model ??= env?.model || 'gemini-2.5-flash';
   genAI = localStorage.apiKey ? new GoogleGenAI({ apiKey: localStorage.apiKey }) : undefined;
-  promptBtn.disabled = !localStorage.apiKey;
-  resetBtn.disabled = !localStorage.apiKey;
+  const hasKey = isOpenRouter() ? !!localStorage.openrouterApiKey : !!localStorage.apiKey;
+  promptBtn.disabled = !hasKey;
+  resetBtn.disabled = !hasKey;
+  apiKeyBtn.textContent = isOpenRouter() ? 'Set OpenRouter API key' : 'Set Gemini API key';
 }
 await initGenAI();
 showIntro();
@@ -162,18 +169,17 @@ document.querySelectorAll('input[name="model"]').forEach((radio) => {
   radio.onclick = () => {
     localStorage.model = radio.value;
     chat = undefined;
+    initGenAI();
     showIntro();
     advancedSection.hidePopover();
   };
 });
 
 async function suggestUserPrompt() {
-  if (currentTools.length == 0 || !genAI || userPromptText.value !== lastSuggestedUserPrompt)
+  if (currentTools.length == 0 || (!genAI && !isOpenRouter()) || userPromptText.value !== lastSuggestedUserPrompt)
     return;
   const userPromptId = ++userPromptPendingId;
-  const response = await genAI.models.generateContent({
-    model: localStorage.model,
-    contents: [
+  const contents = [
       '**Context:**',
       `Today's date is: ${getFormattedDate()}`,
       '**Tool Rules:**',
@@ -189,13 +195,25 @@ async function suggestUserPrompt() {
       ...(chat?.getHistory().length ? [`**Conversation so far:**\n${chat.getHistory().map((t) => `${t.role}: ${t.parts.map((p) => p.text || '').join('')}`).join('\n')}`] : []),
       '**Tools:**',
       JSON.stringify(currentTools),
-    ],
-  });
+    ];
+  let responseText;
+  if (isOpenRouter()) {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.openrouterApiKey}` },
+      body: JSON.stringify({ model: localStorage.model, messages: [{ role: 'user', content: contents.join('\n') }] }),
+    });
+    const data = await res.json();
+    responseText = data.choices[0].message.content;
+  } else {
+    const response = await genAI.models.generateContent({ model: localStorage.model, contents });
+    responseText = response.text;
+  }
   if (userPromptId !== userPromptPendingId || userPromptText.value !== lastSuggestedUserPrompt)
     return;
-  lastSuggestedUserPrompt = response.text;
+  lastSuggestedUserPrompt = responseText;
   userPromptText.value = '';
-  for (const chunk of response.text) {
+  for (const chunk of responseText) {
     await new Promise((r) => requestAnimationFrame(r));
     userPromptText.value += chunk;
   }
@@ -223,7 +241,11 @@ let trace = [];
 async function promptAI() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  chat ??= genAI.chats.create({ model: localStorage.model });
+  if (!chat) {
+    chat = isOpenRouter()
+      ? new OpenRouterChat(localStorage.openrouterApiKey, localStorage.model)
+      : genAI.chats.create({ model: localStorage.model });
+  }
 
   const message = userPromptText.value;
   userPromptText.value = '';
@@ -296,9 +318,11 @@ resetBtn.onclick = () => {
 };
 
 apiKeyBtn.onclick = async () => {
-  const apiKey = prompt('Enter Gemini API key');
+  const label = isOpenRouter() ? 'OpenRouter' : 'Gemini';
+  const apiKey = prompt(`Enter ${label} API key`);
   if (apiKey == null) return;
-  localStorage.apiKey = apiKey;
+  if (isOpenRouter()) localStorage.openrouterApiKey = apiKey;
+  else localStorage.apiKey = apiKey;
   await initGenAI();
   showIntro();
   suggestUserPrompt();
@@ -404,10 +428,11 @@ function appendToolCard(name, args) {
 
 function showIntro() {
   promptResults.innerHTML = '';
-  if (!genAI) {
+  const hasKey = isOpenRouter() ? !!localStorage.openrouterApiKey : !!genAI;
+  if (!hasKey) {
     const el = document.createElement('div');
     el.className = 'chat-empty';
-    el.textContent = 'Set a Gemini API key to start chatting.';
+    el.textContent = isOpenRouter() ? 'Set an OpenRouter API key to start chatting.' : 'Set a Gemini API key to start chatting.';
     promptResults.appendChild(el);
     return;
   }
